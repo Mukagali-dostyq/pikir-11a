@@ -81,9 +81,11 @@
   };
 
   const url = new URL(location.href);
+  // ?demo=1 — показ на презентации: без ключа, ничего не читает и не пишет в базу (всё «сохраняется» понарошку)
+  const DEMO = url.searchParams.has("demo");
   const keyFromUrl = url.searchParams.get("k");
-  if (keyFromUrl) ls.set("pikir_key", keyFromUrl);
-  const KEY = keyFromUrl || ls.get("pikir_key");
+  if (keyFromUrl && !DEMO) ls.set("pikir_key", keyFromUrl);
+  const KEY = DEMO ? "demo" : keyFromUrl || ls.get("pikir_key");
 
   let lang = ls.get("pikir_lang") === "ru" ? "ru" : "kk";
   let t = T[lang];
@@ -107,6 +109,10 @@
 
   // ---------- база ----------
   async function rpc(fn, body) {
+    if (DEMO) {
+      await new Promise((r) => setTimeout(r, 300));
+      return fn === "pikir_load" ? [] : null;
+    }
     const res = await fetch(`${CFG.url}/rest/v1/rpc/${fn}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: CFG.anonKey, Authorization: `Bearer ${CFG.anonKey}` },
@@ -251,7 +257,7 @@
   // ---------- отрисовка ----------
   function topBar() {
     return `<div class="top">
-      <div class="brand"><i aria-hidden="true"></i>Пікір</div>
+      <div class="brand"><i aria-hidden="true"></i>Пікір${DEMO ? `<span style="margin-left:8px;padding:2px 8px;border-radius:99px;background:var(--mid-soft);color:var(--mid);font-size:12px;font-weight:700;letter-spacing:.06em">ДЕМО</span>` : ""}</div>
       <div class="lang" role="group" aria-label="Тіл / Язык">
         <button type="button" data-lang="kk" aria-pressed="${lang === "kk"}">ҚАЗ</button>
         <button type="button" data-lang="ru" aria-pressed="${lang === "ru"}">РУС</button>
@@ -474,6 +480,16 @@
     else if (e.key === "ArrowLeft") go(S.idx - 1);
     else if (/^[1-5]$/.test(e.key)) { update(S.students[S.idx].name, { rating: +e.key }, 300); refreshCard(); }
   });
+
+  // Демо внутри презентации: PageDown/PageUp/Esc (кликер) передаём слайдам — стрелки остаются для учеников
+  if (DEMO && window.parent !== window) {
+    document.addEventListener("keydown", (e) => {
+      if (["PageDown", "PageUp", "Escape"].includes(e.key) && e.target.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        window.parent.postMessage({ pitchKey: e.key }, "*");
+      }
+    });
+  }
 
   // ---------- старт ----------
   if (KEY && CFG.url) show(url.searchParams.get("s"), url.searchParams.get("c"), false);
